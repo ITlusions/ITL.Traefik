@@ -636,12 +636,12 @@ traefik:
         # -- Trust forwarded headers information (X-Forwarded-*).
         trustedIPs: 
         - 0.0.0.0/0
-        insecure: true
+        insecure: false
       proxyProtocol:
         # -- Enable the Proxy Protocol header parsing for the entry point
         trustedIPs: 
         - 0.0.0.0/0
-        insecure: true
+        insecure: false
       # -- Set transport settings for the entrypoint; see also
       # https://doc.traefik.io/traefik/routing/entrypoints/#transport
       transport:
@@ -686,12 +686,12 @@ traefik:
           # -- Trust forwarded headers information (X-Forwarded-*).
         trustedIPs: 
         - 0.0.0.0/0
-        insecure: true
+        insecure: false
       proxyProtocol:
         # -- Enable the Proxy Protocol header parsing for the entry point
         trustedIPs: 
         - 0.0.0.0/0
-        insecure: true
+        insecure: false
       # -- See [upstream documentation](https://doc.traefik.io/traefik/routing/entrypoints/#transport)
       transport:
         respondingTimeouts:
