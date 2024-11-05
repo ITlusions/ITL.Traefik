@@ -758,7 +758,7 @@ traefik:
     # -- Cannot contain type, selector or ports entries.
     spec:
    #   loadBalancerIP: 10.99.99.27
-      externalTrafficPolicy: Cluster
+      externalTrafficPolicy: Local
     loadBalancerSourceRanges: []
     # - 192.168.0.1/32
     # - 172.16.0.0/16
