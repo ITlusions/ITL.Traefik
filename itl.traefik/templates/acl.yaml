@@ -1,0 +1,12 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: acl
+spec:
+  ipAllowList:
+    sourceRange:
+      - 127.0.0.1/32
+      - 10.99.1.0/24
+      - 10.99.2.0/24
+      - 10.99.99.0/24
+      - 10.99.100.0/29
