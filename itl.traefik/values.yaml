@@ -581,6 +581,7 @@ traefik:
   additionalArguments:
     - "--api.insecure=true"
     - "--serversTransport.insecureSkipVerify=true"
+    - "--tcpServersTransport.tls.insecureSkipVerify=true"
   #  - "--providers.kubernetesingress.ingressclass=traefik-internal"
   #  - "--log.level=DEBUG"
 
