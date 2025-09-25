@@ -408,7 +408,10 @@ traefik:
         # -- Create a dedicated metrics service to use with ServiceMonitor
         enabled: true
         labels: {}
-        annotations: {}
+        annotations:
+          prometheus.io/scrape: "true"
+          prometheus.io/port: "9100"
+          prometheus.io/path: "/metrics"
       # -- When set to true, it won't check if Prometheus Operator CRDs are deployed
       disableAPICheck:  # @schema type:[boolean, null]
       serviceMonitor:
