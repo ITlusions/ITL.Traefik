@@ -1,0 +1,85 @@
+# Internal Traefik instance: LAN/VPN only, Gateway API routing, no public exposure.
+# Layered on top of values.yaml: helm install/upgrade traefik-internal . \
+#   -n traefik-internal --create-namespace -f values.yaml -f values-internal.yaml
+#
+# See docs/1-cluster/1.4-ingress.md (ITL.K8s repo) for the full design:
+#   - LoadBalancer 10.99.99.26, LAN/VPN source ranges only
+#   - Only websecure (443) is exposed; web (80) is not
+#   - Gateway API only (Ingress/IngressRoute is the public instance's job)
+#   - Only Gateways labelled itlusions.nl/traefik-instance=internal are handled
+#   - TLS from the pre-existing "internal-tls" Secret (cert-manager, DNS-01,
+#     *.k8s.int.itlusions.nl) - this chart does not create that Secret
+#   - Dashboard and insecure API are off
+
+traefik:
+  fullnameOverride: traefik-internal
+
+  # Gateway API only - no Ingress/IngressClass, that's the public instance's job.
+  ingressClass:
+    enabled: false
+  providers:
+    kubernetesIngress:
+      enabled: false
+    kubernetesGateway:
+      enabled: true
+      namespaces:
+        - traefik-internal
+
+  gatewayClass:
+    enabled: true
+    name: traefik-internal
+
+  gateway:
+    enabled: true
+    name: internal
+    namespace: traefik-internal
+    listeners:
+      # No plaintext listener - this instance only ever serves 443.
+      web: null
+      websecure:
+        port: 8443
+        protocol: HTTPS
+        # Routes can live in any namespace (Prefect, dashboards, etc. aren't
+        # all in traefik-internal), so allow cross-namespace HTTPRoutes.
+        namespacePolicy: All
+        certificateRefs:
+          - name: internal-tls
+            kind: Secret
+        mode: Terminate
+
+  # Only the websecure entrypoint is exposed; web (80) stays internal-only
+  # (unreachable, since nothing routes to it and the Service doesn't publish it).
+  ports:
+    web:
+      expose:
+        default: false
+    websecure:
+      expose:
+        default: true
+      exposedPort: 443
+
+  service:
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: traefik-internal.k8s.int.itlusions.nl
+    spec:
+      loadBalancerIP: 10.99.99.26
+      externalTrafficPolicy: Local
+    # LAN, VPN, and the node/VLAN 99 subnets only - never the public internet.
+    # Matches the ACL middleware's sourceRange in templates/acl.yaml, except
+    # 10.99.100.0/24 (widened from the stale /29 in that file - see
+    # docs/1-cluster/1.1-architecture.md for the rebuilt node subnet).
+    loadBalancerSourceRanges:
+      - 127.0.0.1/32
+      - 10.99.1.0/24
+      - 10.99.2.0/24
+      - 10.99.99.0/24
+      - 10.99.100.0/24
+      - 192.168.1.0/24
+
+  # No dashboard, no insecure API - this drops the public instance's
+  # --api.insecure / --serversTransport.insecureSkipVerify / TLS-skip-verify
+  # arguments entirely (Helm replaces the whole list, it doesn't merge it).
+  additionalArguments: []
+  ingressRoute:
+    dashboard:
+      enabled: false
