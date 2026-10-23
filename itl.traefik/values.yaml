@@ -122,17 +122,22 @@ traefik:
   # Traefik experimental features
   experimental:
     # -- Enable traefik experimental plugins
-    plugins: {}
-    # demo:
-    #   moduleName: github.com/traefik/plugindemo
-    #   version: v0.2.1
+    plugins:
+      modsecurity:
+        moduleName: github.com/acouvreur/traefik-modsecurity-plugin
+        version: v1.3.0
     kubernetesGateway:
       # -- Enable traefik experimental GatewayClass CRD
       enabled: false
 
   gateway:
     # -- When providers.kubernetesGateway.enabled, deploy a default gateway
-    enabled: true
+    # This is the public instance: it routes via Ingress/IngressRoute, not Gateway
+    # API, per docs/1-cluster/1.4-ingress.md. Only the internal instance uses Gateway
+    # API. Left on, this (and providers.kubernetesGateway.enabled below) make Traefik
+    # auto-provision an unwanted second LoadBalancer Service ("traefik-api") that
+    # squats on a VLAN 99 pool IP.
+    enabled: false
     # -- Set a custom name to gateway
     name: ""
     # -- By default, Gateway is created in the same `Namespace` than Traefik.
@@ -172,7 +177,8 @@ traefik:
 
   gatewayClass:  # @schema additionalProperties: false
     # -- When providers.kubernetesGateway.enabled and gateway.enabled, deploy a default gatewayClass
-    enabled: true
+    # Off for the public instance. See gateway.enabled above.
+    enabled: false
     # -- Set a custom name to GatewayClass
     name: ""
     # -- Additional gatewayClass labels (e.g. for filtering gateway objects by custom labels)
@@ -296,14 +302,16 @@ traefik:
 
     kubernetesGateway:
       # -- Enable Traefik Gateway provider for Gateway API
-      enabled: true
+      # Off for the public instance (Ingress/IngressRoute only). See gateway.enabled above.
+      enabled: false
       # -- Toggles support for the Experimental Channel resources (Gateway API release channels documentation).
       # This option currently enables support for TCPRoute and TLSRoute.
       experimentalChannel: false
       # -- Array of namespaces to watch. If left empty, Traefik watches all namespaces.
       namespaces: []
       # -- A label selector can be defined to filter on specific GatewayClass objects only.
-      labelselector: ""
+      # Renamed from `labelselector` (all-lowercase) to `labelSelector` in chart 42.x.
+      labelSelector: ""
       statusAddress:
         # -- This IP will get copied to the Gateway status.addresses, and currently only supports one IP value (IPv4 or IPv6).
         ip: ""
@@ -313,14 +321,6 @@ traefik:
         service:
           name: "{{ (include \"traefik.fullname\" .) }}"
           namespace: "{{ .Release.Namespace }}"
-
-    file:
-      # -- Create a file provider
-      enabled: false
-      # -- Allows Traefik to automatically watch for file changes
-      watch: true
-      # -- File content (YAML format, go template supported) (see https://doc.traefik.io/traefik/providers/file/)
-      content: ""
 
   # -- Add volumes to the traefik pod. The volume name will be passed to tpl.
   # This can be used to mount a cert pair or a configmap that holds a config.toml file.
@@ -343,46 +343,49 @@ traefik:
   # - name: traefik-logs
   #   mountPath: /var/log/traefik
 
-  logs:
-    general:
-      # -- Set [logs format](https://doc.traefik.io/traefik/observability/logs/#format)
-      format:  # @schema enum:["common", "json", null]; type:[string, null]; default: "common"
-      # By default, the level is set to INFO.
-      # -- Alternative logging levels are TRACE, DEBUG, INFO, WARN, ERROR, FATAL, and PANIC.
-      level: "INFO"  # @schema enum:[TRACE,DEBUG,INFO,WARN,ERROR,FATAL,PANIC]; default: "INFO"
-      # -- To write the logs into a log file, use the filePath option.
-      filePath: ""
-      # -- When set to true and format is common, it disables the colorized output.
-      noColor: false
-    access:
-      # -- To enable access logs
-      enabled: true
-      # -- Set [access log format](https://doc.traefik.io/traefik/observability/access-logs/#format)
-      format:  # @schema enum:["common", "json", null]; type:[string, null]; default: "common"
-      # filePath: "/var/log/traefik/access.log
-      # -- Set [bufferingSize](https://doc.traefik.io/traefik/observability/access-logs/#bufferingsize)
-      bufferingSize:  # @schema type:[integer, null]
-      # -- Set [filtering](https://docs.traefik.io/observability/access-logs/#filtering)
-      filters:  # @schema additionalProperties: false
-        # -- Set statusCodes, to limit the access logs to requests with a status codes in the specified range
-        statuscodes: ""
-        # -- Set retryAttempts, to keep the access logs when at least one retry has happened
-        retryattempts: false
-        # -- Set minDuration, to keep access logs when requests take longer than the specified duration
-        minduration: ""
-      # -- Enables accessLogs for internal resources. Default: false.
-      addInternals: false
-      fields:
-        general:
-          # -- Set default mode for fields.names
-          defaultmode: keep  # @schema enum:[keep, drop, redact]; default: keep
-          # -- Names of the fields to limit.
-          names: {}
-        # -- [Limit logged fields or headers](https://doc.traefik.io/traefik/observability/access-logs/#limiting-the-fieldsincluding-headers)
-        headers:
-          # -- Set default mode for fields.headers
-          defaultmode: keep  # @schema enum:[keep, drop, redact]; default: drop
-          names: {}
+  # `logs.general`/`logs.access` (chart 31.x) were split into separate
+  # top-level `log:`/`accessLog:` keys in chart 42.x, with several
+  # access-log field names changed from lowercase to camelCase
+  # (statuscodes -> statusCodes, retryattempts -> retryAttempts,
+  # minduration -> minDuration, defaultmode -> defaultMode).
+  log:
+    # -- Set [logs format](https://doc.traefik.io/traefik/reference/install-configuration/observability/logs-and-accesslogs/#opt-log-format)
+    format:  # @schema enum:["common", "json", null]; type:[string, null]; default: "common"
+    # By default, the level is set to INFO.
+    # -- Alternative logging levels are TRACE, DEBUG, INFO, WARN, ERROR, FATAL, and PANIC.
+    level: "INFO"  # @schema enum:[TRACE,DEBUG,INFO,WARN,ERROR,FATAL,PANIC]; default: "INFO"
+    # -- To write the logs into a log file, use the filePath option.
+    filePath: ""
+    # -- When set to true and format is common, it disables the colorized output.
+    noColor: false
+  accessLog:
+    # -- To enable access logs
+    enabled: true
+    # -- Set [access log format](https://doc.traefik.io/traefik/reference/install-configuration/observability/logs-and-accesslogs/#opt-accesslog-format)
+    format:  # @schema enum:["common", "genericCLF", "json", null]; type:[string, null]; default: "common"
+    # filePath: "/var/log/traefik/access.log
+    # -- Set [bufferingSize](https://doc.traefik.io/traefik/reference/install-configuration/observability/logs-and-accesslogs/#opt-accesslog-bufferingSize)
+    bufferingSize:  # @schema type:[integer, null]
+    # -- Set [filtering](https://doc.traefik.io/traefik/observe/logs-and-access-logs/#access-log-filters)
+    filters:  # @schema additionalProperties: false
+      # -- Set statusCodes, to limit the access logs to requests with a status codes in the specified range
+      statusCodes: ""
+      # -- Set retryAttempts, to keep the access logs when at least one retry has happened
+      retryAttempts: false
+      # -- Set minDuration, to keep access logs when requests take longer than the specified duration
+      minDuration: ""
+    # -- Enables accessLogs for internal resources. Default: false.
+    addInternals: false
+    fields:
+      # -- Set default mode for fields.names
+      defaultMode: keep  # @schema enum:[keep, drop, redact]; default: keep
+      # -- Names of the fields to limit.
+      names: {}
+      # -- [Limit logged fields or headers](https://doc.traefik.io/traefik/observe/logs-and-access-logs/#log-fields-customization)
+      headers:
+        # -- Set default mode for fields.headers
+        defaultMode: keep  # @schema enum:[keep, drop, redact]; default: drop
+        names: {}
 
   metrics:
     ## -- Enable metrics for internal resources. Default: false
@@ -573,10 +576,11 @@ traefik:
           # -- When set to true, the TLS connection accepts any certificate presented by the server regardless of the hostnames it covers.
           insecureSkipVerify: false
 
-  # -- Global command arguments to be passed to all traefik's pods
-  globalArguments:
-  - "--global.checknewversion"
-  - "--global.sendanonymoususage"
+  # `globalArguments: [--global.checknewversion, --global.sendanonymoususage]`
+  # (chart 31.x) became native structured keys under `global:` in chart 42.x.
+  global:
+    checkNewVersion: true
+    sendAnonymousUsage: true
 
   # -- Additional arguments to be passed at Traefik's binary
   # See [CLI Reference](https://docs.traefik.io/reference/static-configuration/cli/)
@@ -633,10 +637,9 @@ traefik:
       protocol: TCP
       # -- See [upstream documentation](https://kubernetes.io/docs/concepts/services-networking/service/#type-nodeport)
       nodePort:  # @schema type:[integer, null]; minimum:0
-      # Port Redirections
-      # Added in 2.2, you can make permanent redirects via entrypoints.
-      # https://docs.traefik.io/routing/entrypoints/#redirection
-      redirectTo: {}
+      # Port Redirections - unused (empty), and moved from `redirectTo` to
+      # `http.redirections.entryPoint` in chart 42.x. Omitted here since it
+      # was never actually configured.
       forwardedHeaders:
         # -- Trust forwarded headers information (X-Forwarded-*).
         trustedIPs: 
@@ -708,20 +711,25 @@ traefik:
           graceTimeOut:               # @schema type:[string, integer, null]
         keepAliveMaxRequests:         # @schema type:[integer, null]; minimum:0
         keepAliveMaxTime:             # @schema type:[string, integer, null]
-      # --  See [upstream documentation](https://doc.traefik.io/traefik/routing/entrypoints/#tls)
-      tls:
-        enabled: true
-        options: ""
-        certResolver: ""
-        domains: []
-      # -- One can apply Middlewares on an entrypoint
-      # https://doc.traefik.io/traefik/middlewares/overview/
-      # https://doc.traefik.io/traefik/routing/entrypoints/#middlewares
-      # -- /!\ It introduces here a link between your static configuration and your dynamic configuration /!\
-      # It follows the provider naming convention: https://doc.traefik.io/traefik/providers/overview/#provider-namespace
-      #   - namespace-name1@kubernetescrd
-      #   - namespace-name2@kubernetescrd
-      middlewares: []
+      # `tls` and `middlewares` moved from directly under the entrypoint to
+      # under `http:` in chart 42.x (grouped with other HTTP-specific
+      # entrypoint settings like encodedCharacters). `tls.enabled: true` is
+      # load-bearing - this is what terminates TLS on the public LoadBalancer.
+      http:
+        # --  See [upstream documentation](https://doc.traefik.io/traefik/routing/entrypoints/#tls)
+        tls:
+          enabled: true
+          options: ""
+          certResolver: ""
+          domains: []
+        # -- One can apply Middlewares on an entrypoint
+        # https://doc.traefik.io/traefik/middlewares/overview/
+        # https://doc.traefik.io/traefik/routing/entrypoints/#middlewares
+        # -- /!\ It introduces here a link between your static configuration and your dynamic configuration /!\
+        # It follows the provider naming convention: https://doc.traefik.io/traefik/providers/overview/#provider-namespace
+        #   - namespace-name1@kubernetescrd
+        #   - namespace-name2@kubernetescrd
+        middlewares: []
     metrics:
       # -- When using hostNetwork, use another port to avoid conflict with node exporter:
       # https://github.com/prometheus/prometheus/wiki/Default-port-allocations
@@ -762,7 +770,7 @@ traefik:
     # -- Additional entries here will be added to the service spec.
     # -- Cannot contain type, selector or ports entries.
     spec:
-    #   loadBalancerIP: 10.99.99.27
+      loadBalancerIP: 10.99.99.27
       externalTrafficPolicy: Local # Set to local if you want to get the real clientIP in the X-Forward-For X-Real-IP. The default is 'Cluster' and will obfuscate the clientIP
     loadBalancerSourceRanges: []
     # - 192.168.0.1/32
@@ -839,9 +847,8 @@ traefik:
     # List of Kubernetes secrets that are accessible for Traefik. If empty, then access is granted to every secret.
     secretResourceNames: []
 
-  # -- Enable to create a PodSecurityPolicy and assign it to the Service Account via RoleBinding or ClusterRoleBinding
-  podSecurityPolicy:
-    enabled: false
+  # podSecurityPolicy removed in chart 42.x (PodSecurityPolicy was removed
+  # from Kubernetes itself in 1.25; this key no longer exists in the schema).
 
   # -- The service account the pods will use to interact with the Kubernetes API
   serviceAccount:  # @schema additionalProperties: false
@@ -991,3 +998,41 @@ traefik:
         insecureSkipVerify: false
     # Enable export of errors logs to the platform. Default: true.
     sendlogs:  # @schema type:[boolean, null]
+
+# OWASP ModSecurity CRS, fronted by the traefik-modsecurity-plugin (registered
+# above under traefik.experimental.plugins.modsecurity). Deploys the WAF
+# engine itself - attach it to a route with a Middleware, e.g.:
+#   apiVersion: traefik.io/v1alpha1
+#   kind: Middleware
+#   metadata:
+#     name: waf
+#   spec:
+#     plugin:
+#       modsecurity:
+#         modSecurityUrl: http://modsecurity-crs.traefik.svc.cluster.local
+#
+# IMPORTANT: the plugin fully reverse-proxies approved traffic through this
+# WAF instance - it's not inspect-then-forward-separately. That means
+# `backend` is the REAL effective origin for every app that attaches the waf
+# Middleware, and there's currently only one modsecurity-crs instance shared
+# across the whole Traefik deployment. Fine while itl-website is the only
+# consumer; if a second app needs WAF protection, it needs its own
+# modsecurity-crs deployment (or a different plugin) - don't just point this
+# backend at a second app, that would break itl-website.
+waf:
+  enabled: true
+  replicas: 1
+  image:
+    tag: apache
+  # https://github.com/coreruleset/modsecurity-crs-docker#environment-variables
+  paranoia: "1"
+  anomalyInbound: "5"
+  anomalyOutbound: "4"
+  backend: "http://itl-website.itl-website.svc.cluster.local"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
