@@ -929,15 +929,17 @@ traefik:
           targetPort: 9000
           protocol: TCP
 
-    - apiVersion: v1
-      kind: Secret
-      metadata:
-        name: traefik-dashboard-auth-secret
-      type: kubernetes.io/basic-auth
-      stringData:
-        username: nweistra
-        password: ***REMOVED-ROTATE-THIS-CREDENTIAL***
-
+    # The traefik-dashboard-auth-secret Secret is deliberately NOT declared
+    # here. A real plaintext credential was committed to this chart's git
+    # history in this exact spot (rotated and scrubbed from history
+    # 2026-10-24, after the repo had been public with it live) - don't
+    # repeat that. Create the Secret out-of-band instead, once, before
+    # deploying - same secretRef pattern used by every other chart in this
+    # org that needs a credential (see e.g. ITL.Headscale's oidc.clientSecretRef):
+    #   kubectl create secret generic traefik-dashboard-auth-secret \
+    #     -n traefik --type=kubernetes.io/basic-auth \
+    #     --from-literal=username=<user> \
+    #     --from-literal=password=<generate a real one, don't reuse an old value>
     - apiVersion: traefik.io/v1alpha1
       kind: Middleware
       metadata:
