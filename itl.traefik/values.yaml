@@ -743,6 +743,19 @@ traefik:
       exposedPort: 9100
       # -- The port protocol (TCP/UDP)
       protocol: TCP
+    # Each key under `ports` becomes both a container port AND an entryPoint
+    # of the same name - "pgsql" here is exactly the entryPoint name
+    # itl.cnpg's IngressRouteTCP templates already reference
+    # (entryPoints: [pgsql]). Added 2026-10-25 - was missing entirely,
+    # so every IngressRouteTCP in that repo was routing nowhere. Raw TCP,
+    # not HTTP - TLS termination happens via HostSNI passthrough in the
+    # IngressRouteTCP itself, same pattern as any other TCP entrypoint.
+    pgsql:
+      port: 5432
+      expose:
+        default: true
+      exposedPort: 5432
+      protocol: TCP
 
   # -- TLS Options are created as [TLSOption CRDs](https://doc.traefik.io/traefik/https/tls/#tls-options)
   # When using `labelSelector`, you'll need to set labels on tlsOption accordingly.
